@@ -1,0 +1,813 @@
+openapi: 3.0.0
+info:
+  title: Gitlab Package Finder
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:58080
+    description: Local server
+tags:
+  - name: internal
+    description: Requests of the current project
+  - name: monitoring
+    description: Application health check & metrics
+paths:
+  /internal/statistics:
+    get:
+      summary: Get statistics by projects and packages
+      description: Get statistics by projects and packages
+      operationId: internalStatistics
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/StatisticsResponse'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  
+  /internal/packages/types:
+    get:
+      summary: Get package types
+      description: Get package types
+      operationId: internalGetPackageTypes
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PackageTypeResponse'  
+                      meta:
+                        allOf:
+                          - $ref: '#/components/schemas/MetaResponse'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  /internal/packages/search:
+    get:
+      summary: Search packages
+      description: Search for packages
+      operationId: internalSearchPackages
+      parameters:
+        - in: query
+          name: type
+          required: true
+          schema:
+            type: string
+          description: Package manager - composer, npm, go, etc
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+          description: Search by package name and version (optional) - package:version
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PackageSearchResponse'
+                      meta:
+                        allOf:
+                          - $ref: '#/components/schemas/MetaResponse'
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  /internal/packages/search/{search_id}:
+    get:
+      summary: Get packages by search ID
+      description: Retrieve a list of packages for search
+      operationId: internalGetPackagesBySearch
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - in: path
+          name: search_id
+          description: Search ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PackageSearchResultResponse'
+                      meta:
+                        $ref: '#/components/schemas/MetaPaginationResponse'
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+
+  /internal/packages/search/{search_id}/failed:
+    get:
+      summary: Get failed repositories for a search
+      description: Retrieve a list of repositories that failed during package search
+      operationId: internalGetFailedRepositories
+      parameters:
+        - in: path
+          name: search_id
+          description: Search ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FailedRepositoryResponse'
+                      meta:
+                        $ref: '#/components/schemas/MetaResponse'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+
+  /internal/projects:
+    get:
+      summary: Get projects
+      description: Retrieve a list of projects
+      operationId: internalGetProjects
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProjectResponse'
+                      meta:
+                        $ref: '#/components/schemas/MetaPaginationResponse'
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  /internal/projects/search:
+    get:
+      summary: Search projects
+      description: Search for projects
+      operationId: internalSearchProjects
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/limitParam'
+        - in: query
+          name: query
+          description: Search by project name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProjectResponse'
+                      meta:
+                        $ref: '#/components/schemas/MetaPaginationResponse'
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  /internal/projects/{project_id}:
+    delete:
+      summary: Delete project
+      description: Delete a project and all its related data
+      operationId: internalDeleteProject
+      parameters:
+        - name: project_id
+          in: path
+          description: Project ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  /internal/projects/{project_id}/branches:
+    get:
+      summary: Get branches
+      description: Retrieve a list of branches by project
+      operationId: internalGetBranches
+      parameters:
+        - name: project_id
+          in: path
+          description: Project ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BranchForProjectResponse'
+                      meta:
+                        $ref: '#/components/schemas/MetaResponse'
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+    post:
+      summary: Create project branch
+      description: Create a new branch for the project
+      operationId: internalCreateBranch
+      parameters:
+        - name: project_id
+          in: path
+          description: Project ID
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        description: Create a new branch
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Branch'
+        required: true
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BranchForProjectResponse'
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+  /internal/projects/{project_id}/branches/{id}:
+    delete:
+      summary: Delete branch
+      description: Delete a branch for project
+      operationId: internalDeleteBranch
+      parameters:
+        - name: project_id
+          in: path
+          description: Project ID
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          description: Branch ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Validation exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '404':
+          description: Branch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/404Response'
+        '409':
+          description: Resource deletion conflicts with current dependencies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/400Response'
+        '500':
+          description: Failed operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/500Response'
+      tags:
+        - internal
+
+  /metrics:
+    get:
+      summary: Grafana metrics
+      description: Grafana metrics
+      operationId: grafanaMetrics
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            text/plain:
+              schema:
+                type: string
+      tags:
+        - monitoring
+  /kubernetes/ready:
+    get:
+      summary: Kubernetes readiness
+      description: Kubernetes readiness
+      operationId: k8sReady
+      responses:
+        '200':
+          description: Successful operation
+      tags:
+        - monitoring
+  /kubernetes/live:
+    get:
+      summary: Kubernetes liveness
+      description: Kubernetes liveness
+      operationId: k8sLive
+      responses:
+        '200':
+          description: Successful operation
+      tags:
+        - monitoring
+  /ping:
+    get:
+      summary: ping
+      description: Ping the API to check availability
+      operationId: ping
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/200Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: string
+                        example: pong
+      tags:
+        - monitoring
+
+components:
+  schemas:
+    MetaResponse:
+      type: object
+      required:
+        - timestamp
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        log_id:
+          type: string
+    MetaPaginationResponse:
+      type: object
+      required:
+        - timestamp
+        - pagination
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        log_id:
+          type: string
+        pagination:
+          $ref: '#/components/schemas/PaginationResponse'
+    PaginationResponse:
+      type: object
+      required:
+        - limit
+        - page
+        - total_pages
+        - total
+      properties:
+        limit:
+          type: integer
+        page:
+          type: integer
+        total_pages:
+          type: integer
+        total:
+          type: integer
+    
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ErrorDetails:
+      type: object
+      required:
+        - error_id
+      properties:
+        error_id:
+          type: string
+    ErrorWithDetailsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          required:
+            - details
+          properties:
+            details:
+              $ref: '#/components/schemas/ErrorDetails'
+    ErrorWithValidationDetailsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          required:
+            - details
+          properties:
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationError'
+
+    200Response:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: object
+        meta:
+          $ref: '#/components/schemas/MetaResponse'
+
+    ValidationError:
+      type: object
+      required:
+        - field
+        - reason
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+    400Response:
+      type: object
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorWithValidationDetailsResponse'
+        meta:
+          $ref: '#/components/schemas/MetaResponse'
+
+    404Response:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorResponse'
+        meta:
+          $ref: '#/components/schemas/MetaResponse'
+
+    500Response:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorWithDetailsResponse'
+        meta:
+          $ref: '#/components/schemas/MetaResponse'
+
+    StatisticsResponse:
+      type: object
+      required:
+        - projects
+        - packages
+      properties:
+        projects:
+          type: integer
+          format: int64
+        packages:
+          type: integer
+          format: int64
+    
+    PackageTypeResponse:
+      type: object
+      required:
+        - name
+        - label
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+
+    PackageResponse:
+      type: object
+      required:
+        - name
+        - version_constraint
+        - last_sync
+        - project
+        - source_file
+      properties:
+        name:
+          type: string
+        version_constraint:
+          type: string
+          description: Version constraint from manifest file (e.g. ^1.0.0, ~2.1.0)
+        resolved_version:
+          type: string
+          description: Resolved version from lockfile (e.g. 1.2.4)
+        source_file:
+          type: string
+          description: Source file name (e.g. composer.lock, package-lock.json)
+        last_sync:
+          type: string
+          format: date-time
+        project:
+          $ref: '#/components/schemas/ProjectForPackageResponse'
+
+    ProjectForPackageResponse:
+      type: object
+      required:
+        - id
+        - name
+        - url
+        - branch
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        url:
+          type: string
+          format: url
+        branch:
+          type: string
+
+    PackageSearchResponse:
+      type: object
+      required:
+        - search_id
+      properties:
+        search_id:
+          type: string
+
+    PackageSearchResultResponse:
+      type: object
+      required:
+        - search_finished
+        - packages
+        - repositories_left
+        - status
+      properties:
+        search_finished:
+          type: boolean
+        repositories_left:
+          type: integer
+          format: int64
+          description: Number of repositories left to scan
+        status:
+          type: string
+          description: Current search status (pending, processing, completed)
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackageResponse'
+
+    FailedRepositoryResponse:
+      type: object
+      required:
+        - project_id
+        - project_name
+        - project_url
+        - branch_id
+        - branch_name
+        - error
+        - timestamp
+      properties:
+        project_id:
+          type: integer
+          format: int32
+        project_name:
+          type: string
+        project_url:
+          type: string
+          format: url
+        branch_id:
+          type: integer
+          format: int32
+        branch_name:
+          type: string
+        error:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+    
+    ProjectResponse:
+      type: object
+      required:
+        - id
+        - name
+        - url
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        url:
+          type: string
+        package_types:
+          type: array
+          items:
+            type: string
+
+    BranchForProjectResponse:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Branch:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+
+  parameters:
+    pageParam:
+      in: query
+      name: page
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: The number of current page.
+    limitParam:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+      description: The numbers of items to return.

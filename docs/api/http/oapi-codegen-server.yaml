@@ -1,0 +1,8 @@
+package: oapi
+generate:
+  std-http-server: true
+  strict-server: true
+output-options:
+  exclude-operation-ids:
+    - grafanaMetrics
+output: pkg/oapi/api.gen.go

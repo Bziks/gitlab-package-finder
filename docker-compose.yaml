@@ -1,0 +1,90 @@
+x-common-env: &common-env
+  GITLAB_TOKEN: ${GITLAB_TOKEN}
+  GITLAB_BASE_URL: ${GITLAB_BASE_URL:-https://gitlab.com/api/v4/}
+  DB_HOST: gpf-mysql:3306
+  DB_USER: user
+  DB_PASS: pass
+  DB_NAME: gitlab_package_finder
+  DB_MIGRATIONS_PATH: /app/migrations
+  REDIS_HOSTS: gpf-redis:6379
+
+services:
+  gpf-migrate:
+    container_name: gpf-migrate
+    build: .
+    restart: "no"
+    environment:
+      <<: *common-env
+    command: ["migrate", "up"]
+    depends_on:
+      gpf-mysql:
+        condition: service_healthy
+      gpf-redis:
+        condition: service_started
+
+  gpf-app:
+    container_name: gpf-app
+    build: .
+    restart: unless-stopped
+    ports:
+      - "58080:58080"
+    environment:
+      <<: *common-env
+      HTTP_PORT: 58080
+    command: ["api"]
+    depends_on:
+      gpf-migrate:
+        condition: service_completed_successfully
+
+  gpf-sync:
+    container_name: gpf-sync
+    build: .
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PROJECTS_SYNC_INTERVAL: ${PROJECTS_SYNC_INTERVAL:-1h}
+    command: ["projects-sync"]
+    depends_on:
+      gpf-migrate:
+        condition: service_completed_successfully
+
+  gpf-worker:
+    build: .
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    command: ["search-processing"]
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+    depends_on:
+      gpf-migrate:
+        condition: service_completed_successfully
+
+  gpf-mysql:
+    container_name: gpf-mysql
+    image: mysql:9.1.0
+    restart: always
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: gitlab_package_finder
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+    volumes:
+      - gpf-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gpf-redis:
+    container_name: gpf-redis
+    image: redis:7
+    restart: always
+    ports:
+      - "6381:6379"
+
+volumes:
+  gpf-mysql-data:

@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitLab Package Finder</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+  </head>
+  <body>
+    <div class="container" x-data="app()">
+      <!-- Navigation Tabs -->
+      <div class="nav-tabs">
+        <button
+          class="nav-tab"
+          :class="{ active: page === 'main' }"
+          @click="page = 'main'"
+        >
+          Search
+        </button>
+        <button
+          class="nav-tab"
+          :class="{ active: page === 'projects' }"
+          @click="stopPolling(); page = 'projects'; loadProjects()"
+        >
+          Projects
+        </button>
+      </div>
+
+      <!-- ==================== Search Page ==================== -->
+      <div x-show="page === 'main'">
+        <div class="main-layout">
+          <div class="left-section">
+            <div class="search-container">
+              <select class="search-bar search-type" x-model="packageType">
+                <template x-for="pt in packageTypes" :key="pt.name">
+                  <option :value="pt.name" x-text="pt.label"></option>
+                </template>
+              </select>
+              <input
+                type="text"
+                class="search-bar search-input"
+                placeholder="Search packages... (package[:version])"
+                x-model="searchQuery"
+                @keyup.enter="startSearch()"
+              />
+              <button class="search-btn" @click="startSearch()">Search</button>
+            </div>
+
+            <!-- Package Results -->
+            <template x-if="packages.length === 0 && searchId && searchStatus !== 'completed'">
+              <div class="loading">Searching...</div>
+            </template>
+            <template x-if="packages.length === 0 && searchId && searchStatus === 'completed'">
+              <div class="muted" style="text-align: center; padding: 40px;">No results found</div>
+            </template>
+            <template x-for="pkg in packages" :key="pkg.project.id + '-' + (pkg.source_file || '')">
+              <div class="result-row">
+                <div class="result-row-project">
+                  <a
+                    :href="pkg.project.url + '/-/tree/' + pkg.project.branch"
+                    target="_blank"
+                    x-text="pkg.project.name"
+                  ></a>
+                  <span class="result-row-arrow">&nearr;</span>
+                </div>
+                <span class="result-row-branch" x-text="pkg.project.branch"></span>
+                <span class="result-row-versions">
+                  manifest: <span x-text="pkg.version_constraint || '-'"></span>
+                  &middot; lockfile: <span x-text="pkg.resolved_version || '-'"></span>
+                  &middot; <span x-text="pkg.source_file || '-'"></span>
+                </span>
+                <span class="result-row-date" x-text="formatShortDate(pkg.last_sync)"></span>
+              </div>
+            </template>
+
+            <!-- Package Pagination -->
+            <div class="pagination" x-show="packagesTotalPages > 1">
+              <button :disabled="packagesPage <= 1" @click="loadPackages(packagesPage - 1)">&lt;</button>
+              <template x-for="p in paginationRange(packagesPage, packagesTotalPages)" :key="'pkg-' + p">
+                <button
+                  :class="{ active: p === packagesPage }"
+                  :disabled="p === '...'"
+                  @click="p !== '...' && loadPackages(p)"
+                  x-text="p"
+                ></button>
+              </template>
+              <button :disabled="packagesPage >= packagesTotalPages" @click="loadPackages(packagesPage + 1)">&gt;</button>
+            </div>
+          </div>
+
+          <div class="right-section">
+            <!-- Statistics -->
+            <div class="statistics">
+              <div class="stats-title">Statistics</div>
+              <div class="stat-item">
+                <span class="stat-label">Projects: </span>
+                <span class="stat-value" x-text="stats.projects ?? '-'"></span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Packages: </span>
+                <span class="stat-value" x-text="stats.packages ?? '-'"></span>
+              </div>
+            </div>
+
+            <!-- Search Status -->
+            <div class="search-status-container" x-show="searchId">
+              <div class="search-status-row">
+                <span class="search-status-label">Status:</span>
+                <span
+                  class="status-badge"
+                  :class="searchStatus"
+                  x-text="statusLabel(searchStatus)"
+                ></span>
+              </div>
+              <div class="search-status-row">
+                <span class="search-status-label">Repositories left:</span>
+                <span class="repos-count-badge" x-text="repositoriesLeft"></span>
+              </div>
+            </div>
+
+            <!-- Failed Repositories -->
+            <div x-show="failedRepos.length > 0">
+              <details class="failed-repos-wrapper">
+                <summary class="failed-repos-summary">
+                  Failed Repositories (<span x-text="failedRepos.length"></span>)
+                </summary>
+                <div style="margin-top: 12px;">
+                  <template x-for="repo in failedRepos" :key="repo.project_name + repo.branch_name">
+                    <div class="failed-repo-item">
+                      <div class="failed-repo-header">
+                        <div>
+                          <a :href="repo.project_url" target="_blank" x-text="repo.project_name"></a>
+                          <span class="failed-repo-branch" x-text="'/ ' + repo.branch_name"></span>
+                        </div>
+                        <div class="failed-repo-time" x-text="new Date(repo.timestamp * 1000).toLocaleString()"></div>
+                      </div>
+                      <div class="failed-repo-error">
+                        <strong>Error:</strong> <span x-text="repo.error"></span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== Projects Page ==================== -->
+      <div x-show="page === 'projects'">
+        <div class="main-layout">
+          <div class="left-section">
+            <div class="search-full-container">
+              <input
+                type="text"
+                class="search-full"
+                placeholder="Search projects..."
+                x-model="projectQuery"
+                @input.debounce.300ms="searchProjects()"
+                @keyup.enter="searchProjects()"
+              />
+              <button class="search-full-btn" @click="searchProjects()">Search</button>
+            </div>
+
+            <template x-for="proj in projects" :key="proj.id">
+              <div class="project-card" :class="{ expanded: expandedProject && expandedProject.id === proj.id }">
+                <div class="project-card-header" @click="toggleProject(proj)">
+                  <span class="project-card-name" x-text="proj.name"></span>
+                  <div class="project-card-tags">
+                    <template x-for="pt in (proj.package_types || [])" :key="pt">
+                      <span class="pkg-tag" :class="pkgTagClass(pt)" x-text="pt"></span>
+                    </template>
+                  </div>
+                  <a class="project-card-url" :href="proj.url" target="_blank" @click.stop>&nearr;</a>
+                </div>
+
+                <!-- Inline expand -->
+                <div class="project-expand" x-show="expandedProject && expandedProject.id === proj.id" x-transition>
+                  <div class="project-expand-section-title">Branches</div>
+                  <div class="branch-list">
+                    <template x-for="branch in branches" :key="branch.id">
+                      <div class="branch-item">
+                        <span class="branch-name" x-text="branch.name"></span>
+                        <button class="delete-btn" @click="deleteBranch(branch.id)">Del</button>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="add-branch-container">
+                    <input
+                      type="text"
+                      class="add-branch-input"
+                      placeholder="Branch name"
+                      x-model="newBranchName"
+                      @keyup.enter="addBranch()"
+                    />
+                    <button class="add-branch-btn" @click="addBranch()">Add</button>
+                  </div>
+                  <button
+                    class="delete-project-btn"
+                    @click="deleteProject()"
+                  >
+                    Delete Project
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="projects.length === 0">
+              <div class="muted" style="text-align: center; padding: 40px;">No projects found</div>
+            </template>
+
+            <!-- Projects Pagination -->
+            <div class="pagination" x-show="projectsTotalPages > 1">
+              <button :disabled="projectsPage <= 1" @click="loadProjects(projectsPage - 1)">&lt;</button>
+              <template x-for="p in paginationRange(projectsPage, projectsTotalPages)" :key="'proj-' + p">
+                <button
+                  :class="{ active: p === projectsPage }"
+                  :disabled="p === '...'"
+                  @click="p !== '...' && loadProjects(p)"
+                  x-text="p"
+                ></button>
+              </template>
+              <button :disabled="projectsPage >= projectsTotalPages" @click="loadProjects(projectsPage + 1)">&gt;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function app() {
+        return {
+          // Navigation
+          page: 'main',
+
+          // Main page - search
+          packageTypes: [],
+          packageType: '',
+          searchQuery: '',
+          searchId: null,
+          searchStatus: 'pending',
+          repositoriesLeft: 0,
+          packages: [],
+          packagesPage: 1,
+          packagesTotalPages: 1,
+          pollingTimer: null,
+
+          // Main page - statistics
+          stats: {},
+
+          // Main page - failed repos
+          failedRepos: [],
+
+          // Projects page
+          projects: [],
+          projectsPage: 1,
+          projectsTotalPages: 1,
+          projectQuery: '',
+          expandedProject: null,
+
+          // Inline expand
+          branches: [],
+          newBranchName: '',
+
+          init() {
+            this.loadStatistics();
+            this.loadPackageTypes();
+          },
+
+          // ==================== API Calls ====================
+
+          async loadPackageTypes() {
+            try {
+              const res = await fetch('/internal/packages/types');
+              const json = await res.json();
+              this.packageTypes = json.data || [];
+              if (this.packageTypes.length > 0 && !this.packageType) {
+                this.packageType = this.packageTypes[0].name;
+              }
+            } catch (e) {
+              console.error('Error loading package types:', e);
+            }
+          },
+
+          async loadStatistics() {
+            try {
+              const res = await fetch('/internal/statistics');
+              const json = await res.json();
+              this.stats = json.data;
+            } catch (e) {
+              console.error('Error loading statistics:', e);
+            }
+          },
+
+          async startSearch() {
+            if (!this.searchQuery.trim()) return;
+
+            this.stopPolling();
+            this.searchStatus = 'pending';
+            this.packages = [];
+            this.packagesPage = 1;
+            this.packagesTotalPages = 1;
+            this.failedRepos = [];
+            this.repositoriesLeft = 0;
+
+            try {
+              const res = await fetch(
+                '/internal/packages/search?query=' +
+                  encodeURIComponent(this.searchQuery) +
+                  '&type=' +
+                  encodeURIComponent(this.packageType)
+              );
+              if (!res.ok) {
+                console.error('Search request failed:', res.status);
+                return;
+              }
+              const json = await res.json();
+              this.searchId = json.data.search_id;
+
+              this.pollResults();
+              this.pollingTimer = setInterval(() => this.pollResults(), 1000);
+            } catch (e) {
+              console.error('Error starting search:', e);
+            }
+          },
+
+          async pollResults() {
+            if (!this.searchId) return;
+            try {
+              const res = await fetch(
+                '/internal/packages/search/' + encodeURIComponent(this.searchId) +
+                  '?page=' + this.packagesPage
+              );
+              const json = await res.json();
+
+              this.searchStatus = json.data.status;
+              this.repositoriesLeft = json.data.repositories_left || 0;
+              this.packages = json.data.packages || [];
+              this.packagesPage = json.meta.pagination.page;
+              this.packagesTotalPages = json.meta.pagination.total_pages;
+
+              if (this.searchStatus === 'completed') {
+                this.stopPolling();
+              }
+
+              // Fetch failed repos
+              await this.loadFailedRepos();
+            } catch (e) {
+              console.error('Error polling results:', e);
+            }
+          },
+
+          async loadFailedRepos() {
+            if (!this.searchId) return;
+            try {
+              const res = await fetch(
+                '/internal/packages/search/' + encodeURIComponent(this.searchId) + '/failed'
+              );
+              if (res.ok) {
+                const json = await res.json();
+                this.failedRepos = json.data || [];
+              }
+            } catch (e) {
+              console.error('Error loading failed repos:', e);
+            }
+          },
+
+          async loadPackages(page) {
+            this.packagesPage = page;
+            if (!this.searchId) return;
+            try {
+              const res = await fetch(
+                '/internal/packages/search/' + encodeURIComponent(this.searchId) +
+                  '?page=' + page
+              );
+              const json = await res.json();
+              this.packages = json.data.packages || [];
+              this.packagesPage = json.meta.pagination.page;
+              this.packagesTotalPages = json.meta.pagination.total_pages;
+            } catch (e) {
+              console.error('Error loading packages:', e);
+            }
+          },
+
+          async loadProjects(page = 1) {
+            this.projectsPage = page;
+            try {
+              let url = '/internal/projects?page=' + page + '&limit=10';
+              const res = await fetch(url);
+              const json = await res.json();
+              this.projects = json.data || [];
+              this.projectsPage = json.meta.pagination.page;
+              this.projectsTotalPages = json.meta.pagination.total_pages;
+            } catch (e) {
+              console.error('Error loading projects:', e);
+            }
+          },
+
+          async searchProjects() {
+            if (!this.projectQuery.trim()) {
+              this.loadProjects(1);
+              return;
+            }
+            try {
+              const res = await fetch(
+                '/internal/projects/search?query=' +
+                  encodeURIComponent(this.projectQuery) +
+                  '&page=1&limit=10'
+              );
+              const json = await res.json();
+              this.projects = json.data || [];
+              this.projectsPage = json.meta.pagination.page;
+              this.projectsTotalPages = json.meta.pagination.total_pages;
+            } catch (e) {
+              console.error('Error searching projects:', e);
+              this.loadProjects(1);
+            }
+          },
+
+          async toggleProject(proj) {
+            if (this.expandedProject && this.expandedProject.id === proj.id) {
+              this.expandedProject = null;
+              this.branches = [];
+              this.newBranchName = '';
+              return;
+            }
+
+            this.expandedProject = proj;
+            this.branches = [];
+            this.newBranchName = '';
+
+            try {
+              const res = await fetch(
+                '/internal/projects/' + proj.id + '/branches'
+              );
+              if (res.ok) {
+                const json = await res.json();
+                this.branches = json.data || [];
+              }
+            } catch (e) {
+              console.error('Error loading branches:', e);
+            }
+          },
+
+          async addBranch() {
+            if (!this.expandedProject || !this.newBranchName.trim()) return;
+
+            try {
+              const res = await fetch(
+                '/internal/projects/' + this.expandedProject.id + '/branches',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: this.newBranchName.trim() }),
+                }
+              );
+              if (res.ok) {
+                const json = await res.json();
+                this.branches.push(json.data);
+                this.newBranchName = '';
+              } else {
+                alert('Error adding branch');
+              }
+            } catch (e) {
+              console.error('Error adding branch:', e);
+              alert('Error adding branch');
+            }
+          },
+
+          async deleteBranch(branchId) {
+            if (!this.expandedProject) return;
+            if (!confirm('Are you sure you want to delete this branch?')) return;
+
+            try {
+              const res = await fetch(
+                '/internal/projects/' + this.expandedProject.id + '/branches/' + branchId,
+                { method: 'DELETE' }
+              );
+              if (res.ok || res.status === 204) {
+                this.branches = this.branches.filter((b) => b.id !== branchId);
+              } else {
+                const json = await res.json();
+                alert(json.error?.message || 'Error deleting branch');
+              }
+            } catch (e) {
+              console.error('Error deleting branch:', e);
+              alert('Error deleting branch');
+            }
+          },
+
+          async deleteProject() {
+            if (!this.expandedProject) return;
+            if (!confirm('Are you sure you want to delete this project? This will also delete all its branches.')) return;
+
+            try {
+              const res = await fetch(
+                '/internal/projects/' + this.expandedProject.id,
+                { method: 'DELETE' }
+              );
+              if (res.ok || res.status === 204) {
+                this.projects = this.projects.filter((p) => p.id !== this.expandedProject.id);
+                this.expandedProject = null;
+                this.branches = [];
+              } else {
+                alert('Error deleting project');
+              }
+            } catch (e) {
+              console.error('Error deleting project:', e);
+              alert('Error deleting project');
+            }
+          },
+
+          // ==================== Helpers ====================
+
+          pkgTagClass(name) {
+            const map = {
+              composer: 'pkg-tag-composer',
+              npm: 'pkg-tag-npm',
+              go: 'pkg-tag-go',
+            };
+            return map[name] || 'pkg-tag-default';
+          },
+
+          stopPolling() {
+            if (this.pollingTimer) {
+              clearInterval(this.pollingTimer);
+              this.pollingTimer = null;
+            }
+          },
+
+          statusLabel(status) {
+            const map = {
+              pending: 'Pending',
+              processing: 'In Progress',
+              completed: 'Finished',
+            };
+            return map[status] || 'Unknown';
+          },
+
+          formatShortDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[d.getMonth()] + ' ' + d.getDate();
+          },
+
+          paginationRange(current, total) {
+            if (total <= 7) {
+              return Array.from({ length: total }, (_, i) => i + 1);
+            }
+            const pages = [];
+            for (let i = 1; i <= total; i++) {
+              if (i <= 3 || i > total - 3 || Math.abs(i - current) <= 1) {
+                pages.push(i);
+              } else if (pages[pages.length - 1] !== '...') {
+                pages.push('...');
+              }
+            }
+            return pages;
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

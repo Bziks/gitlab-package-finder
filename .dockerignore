@@ -1,0 +1,9 @@
+.claude/
+.git/
+bin/
+vendor/
+.env
+.env.*
+!.env.example
+*.md
+docs/

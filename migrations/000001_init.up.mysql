@@ -1,0 +1,76 @@
+-- 1. package_types (lookup table, seeded)
+CREATE TABLE package_types (
+    id SMALLINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    label VARCHAR(50) NOT NULL,
+    INDEX idx_name (name)
+) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO package_types (name, label) VALUES
+    ('composer', 'Composer'),
+    ('go', 'Go Modules'),
+    ('npm', 'NPM');
+
+-- 2. projects
+CREATE TABLE projects (
+    id INT UNSIGNED NOT NULL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    url TEXT NOT NULL,
+    INDEX idx_name (name)
+) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. project_branches (FK → projects, CASCADE)
+CREATE TABLE project_branches (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    project_id INT UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    INDEX idx_project_id (project_id),
+    CONSTRAINT fk_project_branches_project_id
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4. project_package_types (bridge, FKs → projects + package_types, CASCADE)
+CREATE TABLE project_package_types (
+    project_id INT UNSIGNED NOT NULL,
+    package_type_id SMALLINT UNSIGNED NOT NULL,
+    PRIMARY KEY (project_id, package_type_id),
+    INDEX idx_package_type_id (package_type_id),
+    CONSTRAINT fk_ppt_project_id
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ppt_package_type_id
+        FOREIGN KEY (package_type_id) REFERENCES package_types(id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. packages (FK → package_types, CASCADE)
+CREATE TABLE packages (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type_id SMALLINT UNSIGNED NOT NULL,
+    last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_name (name),
+    INDEX idx_type_id (type_id),
+    UNIQUE KEY unique_package_type (name, type_id),
+    CONSTRAINT fk_packages_type_id
+        FOREIGN KEY (type_id) REFERENCES package_types(id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6. project_dependencies (FKs → project_branches + packages, CASCADE)
+CREATE TABLE project_dependencies (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    project_branch_id INT UNSIGNED NOT NULL,
+    package_id INT UNSIGNED NOT NULL,
+    source_file VARCHAR(255) NOT NULL DEFAULT '',
+    version_constraint VARCHAR(100) NOT NULL DEFAULT '',
+    resolved_version VARCHAR(100) NULL,
+    last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_project_branch (project_branch_id),
+    INDEX idx_package_id (package_id),
+    INDEX idx_version_constraint (version_constraint),
+    INDEX idx_resolved_version (resolved_version),
+    INDEX idx_source_file (source_file),
+    UNIQUE KEY unique_dependency (project_branch_id, package_id, version_constraint, resolved_version, source_file),
+    CONSTRAINT fk_pd_project_branch_id
+        FOREIGN KEY (project_branch_id) REFERENCES project_branches(id) ON DELETE CASCADE,
+    CONSTRAINT fk_pd_package_id
+        FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
