@@ -1,5 +1,7 @@
 # GitLab Package Finder
 
+> **Note:** This repository on GitHub is a **read-only mirror**. Full development happens on GitLab: https://gitlab.com/bziks/gitlab-package-finder
+
 Search which libraries are used across your GitLab repositories. Supports multiple package managers and provides a web UI for browsing results.
 
 ## Supported Package Managers
